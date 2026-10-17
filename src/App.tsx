@@ -1,54 +1,87 @@
-import TimerPage from "./pages/TimerPage";
 import { useState } from "react";
 import {
   Timer,
   Settings,
+  History,
 } from "lucide-react";
 
+import TimerPage from "./pages/TimerPage";
+import HistoryPage from "./pages/HistoryPage";
+import SettingsPage from "./pages/SettingsPage";
+import { TimerProvider } from "./context/TimerContext";
+
+type Page = "timer" | "history" | "settings";
+
 const App = () => {
-  const [page, setPage] = useState("timer");
- 
+  const [page, setPage] = useState<Page>("timer");
+
   const renderPage = () => {
     switch (page) {
       case "timer":
         return <TimerPage />;
+
+      case "history":
+        return <HistoryPage />;
+
       case "settings":
-        return (
-          <div className="pt-10 text-center text-gray-500">
-            Will be available soon
-          </div>
-        );
+        return <SettingsPage />;
+
       default:
-        return null;
+        return <TimerPage />;
     }
   };
- 
+
   const tabs = [
-    { id: "timer", icon: Timer, label: "Timer" },
-    { id: "settings", icon: Settings, label: "Einstellungen" },
+    { id: "timer" as const, icon: Timer, label: "Timer" },
+    { id: "history" as const, icon: History, label: "Verlauf" },
+    {
+      id: "settings" as const,
+      icon: Settings,
+      label: "Einstellungen",
+    },
   ];
- 
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="p-6">{renderPage()}</div>
- 
-      {/* Nav Bar: standardmäßig fix am unteren Bildschirmrand */}
-      <nav className="fixed bottom-0 left-0 right-0 flex justify-around border-t bg-white p-3 shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
-        {tabs.map(({ id, icon: Icon, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setPage(id)}
-            className={`flex flex-col items-center gap-1 px-4 py-1 transition-colors ${
-              page === id ? "text-blue-600" : "text-gray-500"
-            }`}
-          >
-            <Icon size={24} />
-            <span className="text-xs">{label}</span>
-          </button>
-        ))}
-      </nav>
-    </div>
+    <TimerProvider>
+      <div className="min-h-screen bg-gray-50 pb-24">
+        <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
+          {renderPage()}
+        </main>
+
+        {/* Navigation am unteren Bildschirmrand */}
+        <nav
+          aria-label="Hauptnavigation"
+          className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] backdrop-blur"
+        >
+          <div className="mx-auto flex max-w-2xl justify-around px-2 py-2">
+            {tabs.map(({ id, icon: Icon, label }) => {
+              const isActive = page === id;
+
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPage(id)}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 transition-colors ${
+                    isActive
+                      ? "font-medium text-blue-600"
+                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                  }`}
+                >
+                  <Icon
+                    size={23}
+                    strokeWidth={isActive ? 2.4 : 1.8}
+                  />
+
+                  <span className="text-xs">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
+    </TimerProvider>
   );
 };
 

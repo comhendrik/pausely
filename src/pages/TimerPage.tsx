@@ -1,219 +1,124 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-} from "@tauri-apps/plugin-notification";
-import { ButtonWrapper } from "../components/ButtonWrapper";
+  Play,
+  Pause,
+  RotateCcw,
+  Minus,
+  Plus,
+} from "lucide-react";
+import { useTimer } from "../context/TimerContext";
+import NotificationTest from "../components/NotificationTest";
+import ActivityConfirmation from "../components/ActivityConfirmation";
 
-function Timer() {
+export default function TimerPage() {
+  const {
+    remaining,
+    isRunning,
+    start,
+    pause,
+    reset,
+    setDuration,
+  } = useTimer();
+
   const [minutes, setMinutes] = useState(5);
-  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [message, setMessage] = useState("Timer ist nicht gestartet.");
-  const [isApproved, setIsApproved] = useState(true);
-  const standUpMinutes = 5;
 
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const formatTime = (seconds: number) =>
+    `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(
+      seconds % 60,
+    ).padStart(2, "0")}`;
 
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+  function changeMinutes(value: number) {
+    const next = Math.min(180, Math.max(1, value));
+    setMinutes(next);
 
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
-
-  async function getNotificationPermission() {
-    let permissionGranted = await isPermissionGranted();
-
-    if (!permissionGranted) {
-      const permission = await requestPermission();
-      permissionGranted = permission === "granted";
-    }
-
-    return permissionGranted;
-  }
-
-  async function startTimer() {
-
-    if (!Number.isFinite(minutes) || minutes <= 0) {
-      setMessage("Bitte eine Zeit größer als 0 Minuten eingeben.");
-      return;
-    }
-
-    stopTimer(false);
-
-    const durationInSeconds = Math.round(minutes * 60);
-
-    setRemainingSeconds(durationInSeconds);
-    setIsRunning(true);
-    setMessage(`Timer läuft für ${minutes} Minute(n).`);
-
-    intervalRef.current = setInterval(() => {
-      setRemainingSeconds((current) => {
-        if (current === null || current <= 1) {
-          return 0;
-        }
-
-        return current - 1;
-      });
-    }, 1000);
-
-    timeoutRef.current = setTimeout(async () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-
-      timeoutRef.current = null;
-      setRemainingSeconds(0);
-      setIsRunning(false);
-      setIsApproved(false);
-      setMessage("Timer ist abgelaufen, warte auf Bestätigung, um den nächsten Timer zu starten.");
-
-      const permissionGranted = await getNotificationPermission();
-
-      if (!permissionGranted) {
-        setMessage(
-          "Timer abgelaufen, aber keine Benachrichtigungsberechtigung vorhanden.",
-        );
-        return;
-      }
-
-      await sendNotification({
-        title: "Timer abgelaufen",
-        body: "Dein Timer ist abgelaufen.",
-      });
-    }, durationInSeconds * 1000);
-  }
-
-  async function approveStandUp() {
-
-    setIsApproved(true);
-
-    stopTimer(false);
-
-    const durationInSeconds = Math.round(standUpMinutes * 60);
-
-    setRemainingSeconds(durationInSeconds);
-    setIsRunning(true);
-    setMessage(`Timer läuft für ${minutes} Minute(n).`);
-
-    intervalRef.current = setInterval(() => {
-      setRemainingSeconds((current) => {
-        if (current === null || current <= 1) {
-          return 0;
-        }
-
-        return current - 1;
-      });
-    }, 1000);
-
-    timeoutRef.current = setTimeout(async () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-
-      timeoutRef.current = null;
-      setRemainingSeconds(0);
-      setIsRunning(false);
-      setMessage("Timer ist abgelaufen");
-
-      const permissionGranted = await getNotificationPermission();
-
-      if (!permissionGranted) {
-        setMessage(
-          "Timer abgelaufen, aber keine Benachrichtigungsberechtigung vorhanden.",
-        );
-        return;
-      }
-
-      await sendNotification({
-        title: "Hinsetzen",
-        body: "Dein Timer ist abgelaufen.",
-      });
-    }, durationInSeconds * 1000);
-  }
-
-  function stopTimer(updateMessage = true) {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    setIsRunning(false);
-    setRemainingSeconds(null);
-
-    if (updateMessage) {
-      setMessage("Timer gestoppt.");
+    if (!isRunning) {
+      setDuration(next);
     }
   }
 
-  function formatTime(seconds: number | null) {
-    if (seconds === null) {
-      return "--:--";
+  function toggleTimer() {
+    if (isRunning) {
+      pause();
+    } else {
+      if (remaining <= 0) {
+        setDuration(minutes);
+      }
+
+      start();
     }
+  }
 
-    const minutesPart = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
-
-    const secondsPart = (seconds % 60).toString().padStart(2, "0");
-
-    return `${minutesPart}:${secondsPart}`;
+  function resetTimer() {
+    reset();
+    setDuration(minutes);
   }
 
   return (
-    <main className="container">
-      <h1>Timer</h1>
-
-      <div className="timer-display" aria-live="polite">
-        {formatTime(remainingSeconds)}
+    <main className="mx-auto flex w-full max-w-sm flex-col items-center gap-6 px-4 py-8 text-gray-900">
+      <div
+        className="py-5 text-7xl font-light tracking-tight tabular-nums"
+        role="timer"
+        aria-label={`${Math.floor(remaining / 60)} Minuten ${remaining % 60} Sekunden`}
+      >
+        {formatTime(remaining)}
       </div>
 
-      <form className="timer-form">
-        <label htmlFor="minutes">Dauer in Minuten</label>
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => changeMinutes(minutes - 1)}
+          disabled={isRunning || minutes <= 1}
+          aria-label="Zeit verringern"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 hover:bg-gray-50 disabled:opacity-30"
+        >
+          <Minus size={18} />
+        </button>
 
-        <input
-          id="minutes"
-          type="number"
-          min="1"
-          step="1"
-          value={minutes}
-          disabled={isRunning}
-          onChange={(event) => {
-            setMinutes(Number(event.currentTarget.value));
-          }}
-        />
+        <div className="min-w-20 text-center">
+          <div className="text-2xl font-medium tabular-nums">
+            {minutes}
+          </div>
+          <div className="text-xs text-gray-500">Minuten</div>
+        </div>
 
-        <ButtonWrapper show={!isRunning && isApproved} type="button" onClick={() => startTimer()}>
-            Timer starten
-        </ButtonWrapper>
+        <button
+          type="button"
+          onClick={() => changeMinutes(minutes + 1)}
+          disabled={isRunning || minutes >= 180}
+          aria-label="Zeit erhöhen"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 hover:bg-gray-50 disabled:opacity-30"
+        >
+          <Plus size={18} />
+        </button>
+      </div>
 
-        <ButtonWrapper show={!isRunning && !isApproved} type="button" onClick={() => approveStandUp()}>
-            Bestätige Aufstehen
-        </ButtonWrapper>
+      <NotificationTest />
 
-        <ButtonWrapper show={isRunning && !isApproved} type="button" onClick={() => stopTimer()}>
-            Stoppe Timer
-        </ButtonWrapper>
-      </form>
+      <button
+        type="button"
+        onClick={toggleTimer}
+        className="flex h-12 w-48 items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-medium text-white transition hover:bg-blue-700 active:scale-[0.98]"
+      >
+        {isRunning ? <Pause size={18} /> : <Play size={18} />}
+        {isRunning
+          ? "Pause"
+          : remaining === 0
+            ? "Erneut starten"
+            : "Starten"}
+      </button>
 
-      <p>{message}</p>
+      <button
+        type="button"
+        onClick={resetTimer}
+        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
+      >
+        <RotateCcw size={14} />
+        Zurücksetzen
+      </button>
+
+      <div className="w-full pt-2">
+        <ActivityConfirmation />
+      </div>
     </main>
   );
 }
-
-export default Timer;
