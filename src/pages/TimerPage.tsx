@@ -7,7 +7,6 @@ import {
   Plus,
 } from "lucide-react";
 import { useTimer } from "../context/TimerContext";
-import NotificationTest from "../components/NotificationTest";
 import ActivityConfirmation from "../components/ActivityConfirmation";
 
 export default function TimerPage() {
@@ -91,8 +90,6 @@ export default function TimerPage() {
           <Plus size={18} />
         </button>
       </div>
-
-      <NotificationTest />
 
       <button
         type="button"
