@@ -9,6 +9,7 @@ import TimerPage from "./pages/TimerPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 import { TimerProvider } from "./context/TimerContext";
+import WorkSessionPanel from "./components/WorkSessionPanel";
 
 type Page = "timer" | "history" | "settings";
 
@@ -43,10 +44,12 @@ const App = () => {
 
   return (
     <TimerProvider>
-      <div className="min-h-screen bg-gray-50 pb-24">
+      <div className="min-h-screen bg-gray-50 pb-44">
         <main className="mx-auto w-full max-w-2xl p-4 sm:p-6">
           {renderPage()}
         </main>
+
+        <WorkSessionPanel />
 
         {/* Navigation am unteren Bildschirmrand */}
         <nav

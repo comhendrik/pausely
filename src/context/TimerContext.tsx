@@ -32,6 +32,7 @@ export function useTimer() {
 
   return {
     ...timer,
+    adjustMinutes: (delta: number) => service.adjustMinutes(delta),
     start: () => service.start(),
     pause: () => service.pause(),
     reset: () => service.reset(),

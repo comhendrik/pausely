@@ -14,6 +14,8 @@ function createDefaultData(): AppData {
   return {
     version: 1,
     sessions: [],
+    workSessions: [],
+    activeWorkSession: null,
     settings: structuredClone(DEFAULT_SETTINGS),
   };
 }
@@ -28,6 +30,8 @@ function mergeData(data: AppData | null): AppData {
   return {
     ...defaults,
     ...data,
+    workSessions: Array.isArray(data.workSessions) ? data.workSessions : [],
+    activeWorkSession: data.activeWorkSession ?? null,
     settings: {
       ...defaults.settings,
       ...data.settings,
@@ -70,7 +74,28 @@ class StorageService {
   async initialize(): Promise<AppData> {
     if (this.initialized) return this.getData();
 
-    const local = mergeData(await localProvider.load());
+    const stored = await localProvider.load();
+    const local = mergeData(stored);
+    if (stored?.activeWorkSession) {
+      const active = stored.activeWorkSession;
+      const now = Date.now();
+      const lastModeSeconds = active.paused
+        ? 0
+        : Math.max(0, Math.floor((now - active.modeStartedAt) / 1000));
+      const sittingSeconds = active.sittingSeconds + (active.mode === "sitting" ? lastModeSeconds : 0);
+      const standingSeconds = active.standingSeconds + (active.mode === "standing" ? lastModeSeconds : 0);
+      const endedAt = new Date(now).toISOString();
+      const settings = local.settings;
+      const score = Math.round(((standingSeconds / 60 * settings.standUpPoints) -
+        (Math.max(0, sittingSeconds / 60 - settings.sittingPenaltyAfterMinutes) * settings.sittingPenaltyPerMinute)) * 100) / 100;
+      if (score > 0) local.workSessions.push({
+        id: active.id, startedAt: active.startedAt, endedAt,
+        durationSeconds: active.elapsedSeconds + lastModeSeconds,
+        sittingSeconds, standingSeconds, switches: active.switches,
+        score, interrupted: true,
+      });
+      await localProvider.save(local);
+    }
 
     this.data = local;
     this.initialized = true;

@@ -1,36 +1,32 @@
-import { useState } from "react";
-import {
-  Play,
-  Pause,
-  RotateCcw,
-  Minus,
-  Plus,
-} from "lucide-react";
+import { useSyncExternalStore } from "react";
+import { Play, Pause, RotateCcw, Minus, Plus, Armchair, PersonStanding } from "lucide-react";
 import { useTimer } from "../context/TimerContext";
 import ActivityConfirmation from "../components/ActivityConfirmation";
+import workSessionService from "../services/WorkSessionService";
 
 export default function TimerPage() {
   const {
     remaining,
+    duration,
     isRunning,
     start,
     pause,
     reset,
     setDuration,
+    adjustMinutes,
   } = useTimer();
-
-  const [minutes, setMinutes] = useState(5);
+  const workSession = useSyncExternalStore(workSessionService.subscribe, workSessionService.getSnapshot, workSessionService.getSnapshot);
 
   const formatTime = (seconds: number) =>
     `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(
       seconds % 60,
     ).padStart(2, "0")}`;
 
-  function changeMinutes(value: number) {
-    const next = Math.min(180, Math.max(1, value));
-    setMinutes(next);
-
-    if (!isRunning) {
+  function changeMinutes(delta: number) {
+    if (isRunning) {
+      adjustMinutes(delta);
+    } else {
+      const next = Math.min(180, Math.max(1, Math.floor(duration / 60) + delta));
       setDuration(next);
     }
   }
@@ -39,8 +35,11 @@ export default function TimerPage() {
     if (isRunning) {
       pause();
     } else {
+      // Der Erinnerungstimer läuft unabhängig vom Sitz-/Stehmodus. Nur beim
+      // erstmaligen Start einer Worksession gilt deren Standardsitzmodus.
+      void workSessionService.start();
       if (remaining <= 0) {
-        setDuration(minutes);
+        setDuration(Math.floor(duration / 60));
       }
 
       start();
@@ -49,46 +48,32 @@ export default function TimerPage() {
 
   function resetTimer() {
     reset();
-    setDuration(minutes);
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-col items-center gap-6 px-4 py-8 text-gray-900">
-      <div
-        className="py-5 text-7xl font-light tracking-tight tabular-nums"
-        role="timer"
-        aria-label={`${Math.floor(remaining / 60)} Minuten ${remaining % 60} Sekunden`}
-      >
-        {formatTime(remaining)}
+    <main className="relative mx-auto flex w-full max-w-sm flex-col items-center gap-6 px-4 py-8 text-gray-900">
+      <div className="pointer-events-none absolute inset-x-4 top-4 z-30">
+        <ActivityConfirmation />
       </div>
 
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => changeMinutes(minutes - 1)}
-          disabled={isRunning || minutes <= 1}
-          aria-label="Zeit verringern"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 hover:bg-gray-50 disabled:opacity-30"
-        >
-          <Minus size={18} />
-        </button>
-
-        <div className="min-w-20 text-center">
-          <div className="text-2xl font-medium tabular-nums">
-            {minutes}
+      <div className={`w-full rounded-3xl border p-5 text-center transition-colors ${workSession?.mode === "standing" ? "border-green-200 bg-green-50" : workSession ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"}`}>
+        <div className="mb-2 flex items-center justify-center gap-2">
+          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${workSession?.mode === "standing" ? "bg-green-100 text-green-800" : workSession ? "bg-blue-100 text-blue-800" : "bg-gray-200 text-gray-700"}`}>
+            {workSession?.mode === "standing" ? <PersonStanding size={18}/> : <Armchair size={18}/>}
+            {workSession ? (workSession.mode === "standing" ? "Standing" : "Sitting") : "Keine Worksession aktiv"}
           </div>
-          <div className="text-xs text-gray-500">Minuten</div>
+          {workSession && <button type="button" onClick={() => void workSessionService.switchMode(workSession.mode === "sitting" ? "standing" : "sitting")} aria-label={`Zu ${workSession.mode === "sitting" ? "Standing" : "Sitting"} wechseln`} title={`Zu ${workSession.mode === "sitting" ? "Standing" : "Sitting"} wechseln`} className="rounded-full border border-gray-200 bg-white p-2 text-gray-700 shadow-sm hover:bg-gray-100">
+            {workSession.mode === "sitting" ? <PersonStanding size={17}/> : <Armchair size={17}/>}
+          </button>}
         </div>
-
-        <button
-          type="button"
-          onClick={() => changeMinutes(minutes + 1)}
-          disabled={isRunning || minutes >= 180}
-          aria-label="Zeit erhöhen"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 hover:bg-gray-50 disabled:opacity-30"
-        >
-          <Plus size={18} />
-        </button>
+        <div className="flex items-center justify-center gap-3 py-3">
+          <button type="button" onClick={() => changeMinutes(-1)} disabled={(isRunning ? remaining : duration) <= 60} aria-label="Zeit um eine Minute verringern" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30"><Minus size={18} /></button>
+          <div className="text-7xl font-light tracking-tight tabular-nums" role="timer" aria-label={`${Math.floor(remaining / 60)} Minuten ${remaining % 60} Sekunden`}>
+            {formatTime(remaining)}
+          </div>
+          <button type="button" onClick={() => changeMinutes(1)} disabled={Math.floor((isRunning ? remaining : duration) / 60) >= 180} aria-label="Zeit um eine Minute erhöhen" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30"><Plus size={18} /></button>
+        </div>
+        <p className="text-xs text-gray-500">Allgemeiner Erinnerungs-Timer · läuft unabhängig vom Modus</p>
       </div>
 
       <button
@@ -113,9 +98,6 @@ export default function TimerPage() {
         Zurücksetzen
       </button>
 
-      <div className="w-full pt-2">
-        <ActivityConfirmation />
-      </div>
     </main>
   );
 }

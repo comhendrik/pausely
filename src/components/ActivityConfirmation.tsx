@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, SkipForward } from "lucide-react";
 import activityService from "../services/ActivityService";
 import type { ActivitySession } from "../types/Activity";
+import workSessionService from "../services/WorkSessionService";
 
 export default function ActivityConfirmation() {
   const [pending, setPending] = useState<ActivitySession | null>(null);
@@ -30,6 +31,7 @@ export default function ActivityConfirmation() {
     try {
       if (outcome === "stood_up") {
         await activityService.confirmStandUp(pending.id);
+        await workSessionService.startInMode("standing");
       } else {
         await activityService.skip(pending.id);
       }
@@ -48,7 +50,7 @@ export default function ActivityConfirmation() {
   return (
     <section
       aria-labelledby="activity-confirmation-title"
-      className="w-full rounded-2xl border border-blue-100 bg-blue-50 p-5 text-gray-900"
+      className="pointer-events-auto relative z-20 w-full rounded-2xl border border-blue-200 bg-blue-50 p-5 text-gray-900 shadow-lg"
     >
       <div className="mb-4">
         <h2

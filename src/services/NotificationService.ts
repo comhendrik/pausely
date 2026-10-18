@@ -6,7 +6,7 @@ import {
 } from "@tauri-apps/plugin-notification";
 
 class NotificationService {
-  public async sendNotification(message: string): Promise<void> {
+  public async sendNotification(message: string, title = "Pausely"): Promise<void> {
     let permissionGranted = await isPermissionGranted();
 
     console.log("Aktuelle Berechtigung:", permissionGranted);
@@ -22,7 +22,7 @@ class NotificationService {
     }
 
     await sendNotification({
-      title: "Tauri Test",
+      title,
       body: message,
     });
 

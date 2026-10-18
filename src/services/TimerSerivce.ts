@@ -1,5 +1,6 @@
 import notificationService from "./NotificationService";
 import activityService from "./ActivityService";
+import workSessionService from "./WorkSessionService";
 
 export interface TimerState {
   duration: number;
@@ -51,6 +52,17 @@ class TimerService {
       remaining: seconds,
       isRunning: false,
     });
+  }
+
+  public adjustMinutes(delta: number): void {
+    if (!Number.isFinite(delta) || delta === 0) return;
+    const duration = Math.min(180 * 60, Math.max(60, this.state.duration + delta * 60));
+    const adjustment = duration - this.state.duration;
+    if (adjustment === 0) return;
+    const remaining = Math.max(60, this.state.remaining + adjustment);
+    this.state = { ...this.state, duration, remaining };
+    if (this.state.isRunning && this.endTime !== null) this.endTime += adjustment * 1000;
+    this.notify();
   }
 
   public start(): void {
@@ -119,13 +131,13 @@ class TimerService {
         isRunning: false,
       });
 
-      void activityService
-        .createPendingSession(this.state.duration)
-        .catch(console.error);
-
-      notificationService.sendNotification(
-        "Zeit aufzustehen! Bestätige deine Aktivität in der App.",
-      );
+      const mode = workSessionService.getSnapshot()?.mode ?? "sitting";
+      if (mode === "sitting") {
+        void activityService.createPendingSession(this.state.duration).catch(console.error);
+        void notificationService.sendNotification("Zeit aufzustehen! Bestätige deine Aktivität in der App.", "Zeit für eine Bewegungspause");
+      } else {
+        void notificationService.sendNotification("Deine Stehphase ist vorbei. Wenn du dich wieder setzt, wechsle in Pausely zu Sitting.", "Zeit für einen Moduswechsel");
+      }
 
       return;
     }

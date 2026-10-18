@@ -16,6 +16,31 @@ export interface DailyScore {
   score: number;
 }
 
+export type WorkMode = "sitting" | "standing";
+export interface WorkSession {
+  id: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  sittingSeconds: number;
+  standingSeconds: number;
+  switches: number;
+  score: number;
+  interrupted: boolean;
+}
+export interface ActiveWorkSession {
+  id: string;
+  startedAt: string;
+  mode: WorkMode;
+  modeStartedAt: number;
+  elapsedSeconds: number;
+  sittingSeconds: number;
+  standingSeconds: number;
+  switches: number;
+  score: number;
+  paused: boolean;
+}
+
 export type StorageMode = "local" | "supabase" | "custom";
 
 export interface StorageSettings {
@@ -38,6 +63,8 @@ export interface AppSettings {
 export interface AppData {
   version: 1;
   sessions: ActivitySession[];
+  workSessions: WorkSession[];
+  activeWorkSession: ActiveWorkSession | null;
   settings: AppSettings;
 }
 
