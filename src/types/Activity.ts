@@ -62,11 +62,21 @@ export interface AppSettings {
   storage: StorageSettings;
 }
 
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  completed?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppData {
   version: 1;
   sessions: ActivitySession[];
   workSessions: WorkSession[];
   activeWorkSession: ActiveWorkSession | null;
+  notes?: Note[];
   settings: AppSettings;
 }
 

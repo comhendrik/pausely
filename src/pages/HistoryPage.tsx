@@ -1,192 +1,220 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { CalendarDays, Footprints, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { CalendarDays, ChartNoAxesColumnIncreasing } from "lucide-react";
 import scoreService from "../services/ScoreService";
 import storageService from "../services/StorageService";
 import activityService from "../services/ActivityService";
-import type { DailyScore } from "../types/Activity";
-import type { WorkSession } from "../types/Activity";
+import type { DailyScore, WorkSession } from "../types/Activity";
 import workSessionService from "../services/WorkSessionService";
 import { localDateKey } from "../types/Activity";
 
+type Period = "week" | "month" | "year";
+
+const periodLabels: Record<Period, string> = {
+  week: "Wöchentlich",
+  month: "Monatlich",
+  year: "Jährlich",
+};
+
+function dateAtOffset(offset: number) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + offset);
+  return date;
+}
+
+function dateRange(period: Period): Date[] {
+  if (period === "week") return Array.from({ length: 7 }, (_, index) => dateAtOffset(index - 6));
+
+  const now = new Date();
+  if (period === "month") {
+    const first = new Date(now.getFullYear(), now.getMonth(), 1, 12);
+    return Array.from({ length: now.getDate() }, (_, index) => new Date(first.getFullYear(), first.getMonth(), index + 1, 12));
+  }
+
+  const first = new Date(now.getFullYear(), 0, 1, 12);
+  const numberOfDays = Math.floor((now.getTime() - first.getTime()) / 86_400_000) + 1;
+  return Array.from({ length: numberOfDays }, (_, index) => {
+    const date = new Date(first);
+    date.setDate(index + 1);
+    return date;
+  });
+}
+
+function formatDay(date: Date) {
+  return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(date);
+}
+
+function formatPoints(points: number) {
+  return points.toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
 export default function HistoryPage() {
+  const [period, setPeriod] = useState<Period>("week");
   const [history, setHistory] = useState<DailyScore[]>([]);
-  const [loading, setLoading] = useState(true);
   const [workSessions, setWorkSessions] = useState<WorkSession[]>([]);
+  const [loading, setLoading] = useState(true);
   const activeWorkSession = useSyncExternalStore(
     workSessionService.subscribe,
     workSessionService.getSnapshot,
     workSessionService.getSnapshot,
   );
-  const previousWorkSessionId = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
-
     async function load() {
       try {
         await storageService.initialize();
-        const result = await scoreService.getHistory(7);
-        const work = storageService.getData().workSessions;
-
-        if (active) { setHistory(result); setWorkSessions(work); }
+        const [scores] = await Promise.all([scoreService.getHistory(366)]);
+        if (!active) return;
+        setHistory(scores);
+        setWorkSessions(storageService.getData().workSessions);
       } catch (error) {
         console.error("Verlauf konnte nicht geladen werden:", error);
       } finally {
         if (active) setLoading(false);
       }
     }
-
     void load();
-    const unsubscribe = activityService.subscribe(() => {
-      void load();
-    });
-    return () => {
-      active = false;
-      unsubscribe();
-    };
+    const unsubscribe = activityService.subscribe(() => { void load(); });
+    return () => { active = false; unsubscribe(); };
   }, []);
 
-  useEffect(() => {
-    const previousId = previousWorkSessionId.current;
-    const currentId = activeWorkSession?.id ?? null;
-    previousWorkSessionId.current = currentId;
-    if (previousId && !currentId) {
-      let active = true;
-      void storageService.initialize().then(() => {
-        if (active) setWorkSessions(storageService.getData().workSessions);
-      });
-      return () => { active = false; };
+  const dailyScores = useMemo(() => {
+    const scores = new Map(history.map((day) => [day.date, day.score]));
+    for (const session of workSessions) {
+      const date = localDateKey(new Date(session.endedAt));
+      scores.set(date, (scores.get(date) ?? 0) + session.score);
     }
-  }, [activeWorkSession]);
-
-  const today = history[history.length - 1];
-  const scoresByDate = new Map(history.map((day) => [day.date, day.score]));
-  for (const session of workSessions) {
-    const date = localDateKey(new Date(session.endedAt));
-    if (scoresByDate.has(date)) {
-      scoresByDate.set(date, (scoresByDate.get(date) ?? 0) + session.score);
+    if (activeWorkSession) {
+      const date = localDateKey();
+      scores.set(date, (scores.get(date) ?? 0) + activeWorkSession.score);
     }
-  }
-  if (activeWorkSession) {
-    const date = localDateKey();
-    if (scoresByDate.has(date)) {
-      scoresByDate.set(date, (scoresByDate.get(date) ?? 0) + activeWorkSession.score);
-    }
-  }
-  const weeklyStands = history.reduce(
-    (sum, day) => sum + day.stands,
-    0,
-  );
-  const maxStands = Math.max(1, ...history.map((day) => day.stands));
+    return scores;
+  }, [history, workSessions, activeWorkSession]);
 
-  function formatDate(date: string) {
-    return new Intl.DateTimeFormat("de-DE", {
-      weekday: "short",
-      day: "2-digit",
-      month: "2-digit",
-    }).format(new Date(`${date}T12:00:00`));
-  }
+  const dates = useMemo(() => dateRange(period), [period]);
+  const average = dates.length
+    ? dates.reduce((sum, date) => sum + (dailyScores.get(localDateKey(date)) ?? 0), 0) / dates.length
+    : 0;
+  const maxDailyScore = Math.max(1, ...dates.map((date) => dailyScores.get(localDateKey(date)) ?? 0));
 
-  if (loading) {
-    return <main className="mx-auto max-w-2xl p-6">Verlauf wird geladen …</main>;
-  }
+  const monthCalendar = useMemo(() => {
+    const now = new Date();
+    const firstDayOffset = (new Date(now.getFullYear(), now.getMonth(), 1).getDay() + 6) % 7;
+    const cells: (Date | null)[] = [
+      ...Array.from({ length: firstDayOffset }, () => null),
+      ...Array.from({ length: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() }, (_, index) => new Date(now.getFullYear(), now.getMonth(), index + 1, 12)),
+    ];
+    while (cells.length % 7 !== 0) cells.push(null);
+    return Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
+  }, []);
+
+  const monthlyAverages = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: now.getMonth() + 1 }, (_, month) => {
+      const daysInMonth = new Date(now.getFullYear(), month + 1, 0).getDate();
+      const daysElapsed = month === now.getMonth() ? now.getDate() : daysInMonth;
+      let points = 0;
+      for (let day = 1; day <= daysElapsed; day++) {
+        points += dailyScores.get(localDateKey(new Date(now.getFullYear(), month, day, 12))) ?? 0;
+      }
+      return {
+        label: new Intl.DateTimeFormat("de-DE", { month: "short" }).format(new Date(now.getFullYear(), month, 1)),
+        average: points / daysElapsed,
+      };
+    });
+  }, [dailyScores]);
+
+  if (loading) return <main className="mx-auto max-w-2xl p-6">Verlauf wird geladen …</main>;
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8 text-gray-900">
       <header>
         <h1 className="text-2xl font-semibold">Dein Verlauf</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Sieh, wie regelmäßig du Bewegungspausen machst.
-        </p>
+        <p className="mt-1 text-sm text-gray-500">Sieh deine durchschnittlichen Punkte im Zeitverlauf.</p>
       </header>
 
-      <section className="grid grid-cols-2 gap-3">
-        <article className="rounded-2xl border border-gray-100 p-4">
-          <Footprints className="mb-3 text-blue-600" size={22} />
-          <p className="text-3xl font-semibold">
-            {today?.stands ?? 0}
-          </p>
-          <p className="mt-1 text-sm text-gray-500">
-            Heute aufgestanden
-          </p>
-        </article>
+      <div role="tablist" aria-label="Zeitraum auswählen" className="flex w-full flex-row flex-nowrap rounded-xl bg-gray-100 p-1">
+        {(Object.keys(periodLabels) as Period[]).map((key) => (
+          <button key={key} type="button" role="tab" aria-selected={period === key} onClick={() => setPeriod(key)} className={`min-w-0 flex-1 whitespace-nowrap rounded-lg px-2 py-2 text-center text-sm font-medium transition-colors sm:px-3 ${period === key ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-900"}`}>
+            {periodLabels[key]}
+          </button>
+        ))}
+      </div>
 
-        <article className="rounded-2xl border border-gray-100 p-4">
-          <TrendingUp className="mb-3 text-green-600" size={22} />
-          <p className="text-3xl font-semibold">{(today ? scoresByDate.get(today.date) ?? today.score : 0).toFixed(1)}</p>
-          <p className="mt-1 text-sm text-gray-500">Punkte heute</p>
-        </article>
+      <section className="rounded-2xl border border-gray-100 bg-white p-5">
+        <div className="flex items-center gap-3">
+          <ChartNoAxesColumnIncreasing className="text-blue-600" size={23} />
+          <div>
+            <p className="text-sm text-gray-500">Durchschnitt pro Tag</p>
+            <p className="text-3xl font-semibold tabular-nums">{formatPoints(average)} <span className="text-base font-medium text-gray-500">Punkte</span></p>
+          </div>
+        </div>
       </section>
 
-      <section className="rounded-2xl border border-gray-100 p-4">
+      {period === "week" && <section className="rounded-2xl border border-gray-100 bg-white p-4">
         <div className="mb-5 flex items-center gap-2">
           <CalendarDays size={20} className="text-blue-600" />
           <h2 className="font-semibold">Letzte 7 Tage</h2>
         </div>
-
         <div className="flex flex-col gap-4">
-          {history.map((day) => (
-            <div key={day.date} className="flex items-center gap-3">
-              <span className="w-20 shrink-0 text-sm text-gray-500">
-                {formatDate(day.date)}
-              </span>
-
+          {dates.map((date) => {
+            const points = dailyScores.get(localDateKey(date)) ?? 0;
+            return <div key={localDateKey(date)} className="flex items-center gap-3">
+              <span className="w-20 shrink-0 text-sm text-gray-500">{formatDay(date)}</span>
               <div className="h-3 flex-1 overflow-hidden rounded-full bg-gray-100">
-                <div
-                  className="h-full rounded-full bg-blue-600 transition-all"
-                  style={{
-                    width: `${(day.stands / maxStands) * 100}%`,
-                  }}
-                />
+                <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${(points / maxDailyScore) * 100}%` }} />
               </div>
-
-              <span className="w-6 text-right text-sm font-medium tabular-nums">
-                {day.stands}
-              </span>
-            </div>
-          ))}
+              <span className="w-16 text-right text-sm font-medium tabular-nums">{formatPoints(points)}</span>
+            </div>;
+          })}
         </div>
-      </section>
+      </section>}
 
-      <section className="rounded-2xl border border-gray-100 p-4">
-        <h2 className="mb-3 font-semibold">Worksession-Historie</h2>
-        {workSessions.length === 0 ? <p className="text-sm text-gray-500">Noch keine Worksessions gespeichert.</p> : <div className="flex flex-col divide-y divide-gray-100">
-          {[...workSessions].reverse().map((session) => <article key={session.id} className="py-3">
-            <div className="flex items-center justify-between"><p className="font-medium">{new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(session.startedAt))}</p><p className="font-semibold">{session.score.toFixed(2)} Punkte</p></div>
-            <p className="mt-1 text-xs text-gray-500">Dauer {Math.floor(session.durationSeconds / 60)} Min · Sitzen {Math.floor(session.sittingSeconds / 60)} Min · Stehen {Math.floor(session.standingSeconds / 60)} Min · {session.switches} Wechsel{session.interrupted ? " · Unterbrochen" : ""}</p>
-          </article>)}
-        </div>}
-      </section>
+      {period === "month" && <section className="rounded-2xl border border-gray-100 bg-white p-4">
+        <div className="mb-5 flex items-center gap-2">
+          <CalendarDays size={20} className="text-blue-600" />
+          <h2 className="font-semibold">{new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(new Date())}</h2>
+        </div>
+        <div className="flex flex-col gap-1 text-center">
+          <div className="grid grid-cols-7 gap-1">
+            {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((day) => <span key={day} className="pb-2 text-xs font-medium text-gray-500">{day}</span>)}
+          </div>
+          {monthCalendar.map((week, weekIndex) => <div key={`week-${weekIndex}`} className="grid grid-cols-7 gap-1">
+            {week.map((date, dayIndex) => {
+              if (!date) return <span key={`empty-${weekIndex}-${dayIndex}`} className="min-h-14" aria-hidden="true" />;
+              const points = dailyScores.get(localDateKey(date)) ?? 0;
+              const intensity = Math.min(1, points / Math.max(1, maxDailyScore));
+              return <div key={localDateKey(date)} title={`${formatDay(date)}: ${formatPoints(points)} Punkte`} className={`flex min-h-14 min-w-0 flex-col items-center justify-center rounded-lg px-0.5 py-1 ${points > 0 ? "bg-blue-100" : "bg-gray-50"}`} style={points > 0 ? { backgroundColor: `rgba(37, 99, 235, ${0.08 + intensity * 0.2})` } : undefined}>
+                <span className="text-xs text-gray-500">{date.getDate()}</span>
+                <span className="mt-1 truncate text-[10px] font-semibold tabular-nums sm:text-xs">{formatPoints(points)}</span>
+              </div>;
+            })}
+          </div>)}
+        </div>
+        <p className="mt-3 text-right text-xs text-gray-500">Punkte pro Tag</p>
+      </section>}
 
-      <section className="rounded-2xl border border-gray-100 p-4">
-        <h2 className="mb-4 font-semibold">Tagesübersicht</h2>
-
-        <div className="flex flex-col divide-y divide-gray-100">
-          {[...history].reverse().map((day) => (
-            <div
-              key={day.date}
-              className="flex items-center justify-between gap-3 py-3"
-            >
-              <div>
-                <p className="font-medium">{formatDate(day.date)}</p>
-                <p className="mt-1 text-xs text-gray-500">
-                  {day.stands} Aufsteh-Ereignisse · {day.skips} übersprungen
-                </p>
+      {period === "year" && <section className="rounded-2xl border border-gray-100 bg-white p-4">
+        <div className="mb-5 flex items-center gap-2">
+          <CalendarDays size={20} className="text-blue-600" />
+          <h2 className="font-semibold">Monatsdurchschnitt · {new Date().getFullYear()}</h2>
+        </div>
+        <div className="flex flex-col gap-4">
+          {(() => {
+            const maxMonthlyAverage = Math.max(1, ...monthlyAverages.map((item) => item.average));
+            return monthlyAverages.map((month) => (
+              <div key={month.label} className="flex items-center gap-3">
+                <span className="w-12 shrink-0 text-sm capitalize text-gray-500">{month.label}</span>
+                <div className="h-3 flex-1 overflow-hidden rounded-full bg-gray-100">
+                  <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${(month.average / maxMonthlyAverage) * 100}%` }} />
+                </div>
+                <span className="w-16 text-right text-sm font-medium tabular-nums">{formatPoints(month.average)}</span>
               </div>
-
-              <div className="text-right">
-                <p className="font-semibold">{(scoresByDate.get(day.date) ?? day.score).toFixed(1)} Punkte</p>
-                <p className="text-xs text-gray-500">Tages-Score</p>
-              </div>
-            </div>
-          ))}
+            ));
+          })()}
         </div>
-
-        <div className="mt-4 rounded-xl bg-gray-50 p-3">
-          <p className="text-sm text-gray-500">Aufgestanden in 7 Tagen</p>
-          <p className="mt-1 text-2xl font-semibold">{weeklyStands}</p>
-        </div>
-      </section>
+      </section>}
     </main>
   );
 }

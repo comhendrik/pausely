@@ -3,15 +3,17 @@ import {
   Timer,
   Settings,
   History,
+  NotebookPen,
 } from "lucide-react";
 
 import TimerPage from "./pages/TimerPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
+import NotesPage from "./pages/NotesPage";
 import { TimerProvider } from "./context/TimerContext";
 import WorkSessionPanel from "./components/WorkSessionPanel";
 
-type Page = "timer" | "history" | "settings";
+type Page = "timer" | "history" | "notes" | "settings";
 
 const App = () => {
   const [page, setPage] = useState<Page>("timer");
@@ -27,6 +29,9 @@ const App = () => {
       case "settings":
         return <SettingsPage />;
 
+      case "notes":
+        return <NotesPage />;
+
       default:
         return <TimerPage />;
     }
@@ -35,6 +40,7 @@ const App = () => {
   const tabs = [
     { id: "timer" as const, icon: Timer, label: "Timer" },
     { id: "history" as const, icon: History, label: "Verlauf" },
+    { id: "notes" as const, icon: NotebookPen, label: "Notizen" },
     {
       id: "settings" as const,
       icon: Settings,

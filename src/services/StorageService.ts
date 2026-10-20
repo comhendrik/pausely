@@ -16,6 +16,7 @@ function createDefaultData(): AppData {
     sessions: [],
     workSessions: [],
     activeWorkSession: null,
+    notes: [],
     settings: structuredClone(DEFAULT_SETTINGS),
   };
 }
@@ -32,6 +33,7 @@ function mergeData(data: AppData | null): AppData {
     ...data,
     workSessions: Array.isArray(data.workSessions) ? data.workSessions : [],
     activeWorkSession: data.activeWorkSession ?? null,
+    notes: Array.isArray(data.notes) ? data.notes : [],
     settings: {
       ...defaults.settings,
       ...data.settings,
