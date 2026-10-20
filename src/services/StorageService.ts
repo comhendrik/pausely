@@ -35,6 +35,12 @@ function mergeData(data: AppData | null): AppData {
     settings: {
       ...defaults.settings,
       ...data.settings,
+      timerShortcuts: Array.isArray(data.settings?.timerShortcuts) && data.settings.timerShortcuts.length === 3
+        ? data.settings.timerShortcuts.map((value) => Number.isFinite(value) ? Math.min(180, Math.max(1, Math.floor(value))) : 1) as [number, number, number]
+        : defaults.settings.timerShortcuts,
+      timerAdjustmentStep: [1, 5, 10].includes(data.settings?.timerAdjustmentStep ?? 0)
+        ? data.settings!.timerAdjustmentStep!
+        : defaults.settings.timerAdjustmentStep,
       storage: {
         ...defaults.settings.storage,
         ...data.settings?.storage,

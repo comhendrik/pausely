@@ -89,6 +89,46 @@ export default function SettingsPage() {
       </header>
 
       <section className="rounded-2xl border border-gray-100 p-5">
+        <div className="mb-4">
+          <h2 className="font-semibold">Timer-Schnellwahl</h2>
+          <p className="mt-1 text-sm text-gray-500">Lege die drei Minutenwerte für die Schnellwahl im Timer fest (1 bis 180 Minuten).</p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {settings.timerShortcuts.map((minutes, index) => (
+            <label key={index} className="text-sm">
+              Schnellwahl {index + 1} (Minuten)
+              <input
+                className={fieldClass}
+                type="number"
+                min="1"
+                max="180"
+                step="1"
+                value={minutes}
+                onChange={(event) => {
+                  const next = [...settings.timerShortcuts] as [number, number, number];
+                  next[index] = Math.min(180, Math.max(1, Math.floor(Number(event.target.value) || 1)));
+                  update("timerShortcuts", next);
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        <label className="mt-4 block text-sm">
+          Änderungsschritt für Plus/Minus
+          <select
+            className={fieldClass}
+            value={settings.timerAdjustmentStep}
+            onChange={(event) => update("timerAdjustmentStep", Number(event.target.value) as 1 | 5 | 10)}
+          >
+            <option value={1}>1 Minute</option>
+            <option value={5}>5 Minuten</option>
+            <option value={10}>10 Minuten</option>
+          </select>
+          <span className="mt-1 block text-xs text-gray-500">Der runde Steps-Button im Timer wechselt weiterhin zwischen diesen Schrittweiten.</span>
+        </label>
+      </section>
+
+      <section className="rounded-2xl border border-gray-100 p-5">
         <div className="mb-4 flex items-center gap-2">
           <HardDrive size={20} className="text-blue-600" />
           <h2 className="font-semibold">Score-Regeln</h2>

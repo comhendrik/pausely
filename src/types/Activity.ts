@@ -57,6 +57,8 @@ export interface AppSettings {
   sittingPenaltyPerMinute: number;
   standUpPoints: number;
   skipPenalty: number;
+  timerShortcuts: [number, number, number];
+  timerAdjustmentStep: 1 | 5 | 10;
   storage: StorageSettings;
 }
 
@@ -73,6 +75,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sittingPenaltyPerMinute: 0.5,
   standUpPoints: 10,
   skipPenalty: 5,
+  timerShortcuts: [15, 30, 60],
+  timerAdjustmentStep: 1,
   storage: {
     mode: "local",
     supabaseUrl: "",

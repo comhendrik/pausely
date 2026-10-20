@@ -1,8 +1,9 @@
-import { useSyncExternalStore } from "react";
-import { Play, Pause, RotateCcw, Minus, Plus, Armchair, PersonStanding } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { Play, Pause, RotateCcw, Minus, Plus, Armchair, PersonStanding, Footprints } from "lucide-react";
 import { useTimer } from "../context/TimerContext";
 import ActivityConfirmation from "../components/ActivityConfirmation";
 import workSessionService from "../services/WorkSessionService";
+import storageService from "../services/StorageService";
 
 export default function TimerPage() {
   const {
@@ -16,6 +17,19 @@ export default function TimerPage() {
     adjustMinutes,
   } = useTimer();
   const workSession = useSyncExternalStore(workSessionService.subscribe, workSessionService.getSnapshot, workSessionService.getSnapshot);
+  const [quickDurations, setQuickDurations] = useState<[number, number, number]>([15, 30, 60]);
+  const [adjustmentStep, setAdjustmentStep] = useState<1 | 5 | 10>(1);
+
+  useEffect(() => {
+    let active = true;
+    storageService.initialize().then((data) => {
+      if (active) {
+        setQuickDurations(data.settings.timerShortcuts);
+        setAdjustmentStep(data.settings.timerAdjustmentStep);
+      }
+    }).catch(console.error);
+    return () => { active = false; };
+  }, []);
 
   const formatTime = (seconds: number) =>
     `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(
@@ -50,6 +64,19 @@ export default function TimerPage() {
     reset();
   }
 
+  function selectQuickDuration(minutes: number) {
+    if (!isRunning) {
+      setDuration(minutes);
+    }
+  }
+
+  function cycleAdjustmentStep() {
+    const next = adjustmentStep === 1 ? 5 : adjustmentStep === 5 ? 10 : 1;
+    setAdjustmentStep(next);
+    const settings = storageService.getData().settings;
+    void storageService.updateSettings({ ...settings, timerAdjustmentStep: next }).catch(console.error);
+  }
+
   return (
     <main className="relative mx-auto flex w-full max-w-sm flex-col items-center gap-6 px-4 py-8 text-gray-900">
       <div className="pointer-events-none absolute inset-x-4 top-4 z-30">
@@ -65,15 +92,40 @@ export default function TimerPage() {
           {workSession && <button type="button" onClick={() => void workSessionService.switchMode(workSession.mode === "sitting" ? "standing" : "sitting")} aria-label={`Zu ${workSession.mode === "sitting" ? "Standing" : "Sitting"} wechseln`} title={`Zu ${workSession.mode === "sitting" ? "Standing" : "Sitting"} wechseln`} className="rounded-full border border-gray-200 bg-white p-2 text-gray-700 shadow-sm hover:bg-gray-100">
             {workSession.mode === "sitting" ? <PersonStanding size={17}/> : <Armchair size={17}/>}
           </button>}
+          <button
+            type="button"
+            onClick={cycleAdjustmentStep}
+            aria-label={`Änderungsschritt: ${adjustmentStep} Minuten. Zum Wechseln anklicken`}
+            title={`Änderungsschritt: ${adjustmentStep} Minuten (anklicken zum Wechseln)`}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-100"
+          >
+            <Footprints size={14} aria-hidden="true" />
+            <span>{adjustmentStep}</span>
+          </button>
         </div>
         <div className="flex items-center justify-center gap-3 py-3">
-          <button type="button" onClick={() => changeMinutes(-1)} disabled={(isRunning ? remaining : duration) <= 60} aria-label="Zeit um eine Minute verringern" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30"><Minus size={18} /></button>
+          <button type="button" onClick={() => changeMinutes(-adjustmentStep)} disabled={(isRunning ? remaining : duration) <= adjustmentStep * 60} aria-label={`Zeit um ${adjustmentStep} Minuten verringern`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30"><Minus size={18} /></button>
           <div className="text-7xl font-light tracking-tight tabular-nums" role="timer" aria-label={`${Math.floor(remaining / 60)} Minuten ${remaining % 60} Sekunden`}>
             {formatTime(remaining)}
           </div>
-          <button type="button" onClick={() => changeMinutes(1)} disabled={Math.floor((isRunning ? remaining : duration) / 60) >= 180} aria-label="Zeit um eine Minute erhöhen" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30"><Plus size={18} /></button>
+          <button type="button" onClick={() => changeMinutes(adjustmentStep)} disabled={Math.floor((isRunning ? remaining : duration) / 60) + adjustmentStep > 180} aria-label={`Zeit um ${adjustmentStep} Minuten erhöhen`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-30"><Plus size={18} /></button>
         </div>
         <p className="text-xs text-gray-500">Allgemeiner Erinnerungs-Timer · läuft unabhängig vom Modus</p>
+      </div>
+
+      <div className="flex w-full gap-2" aria-label="Schnellauswahl für die Dauer">
+        {quickDurations.map((minutes, index) => (
+          <button
+            key={index}
+            type="button"
+            onClick={() => selectQuickDuration(minutes)}
+            disabled={isRunning}
+            aria-pressed={duration === minutes * 60}
+            className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${duration === minutes * 60 ? "border-blue-600 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+          >
+            {minutes} Min
+          </button>
+        ))}
       </div>
 
       <button
